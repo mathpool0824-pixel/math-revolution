@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>회전체 시뮬레이션 - AI Vision</title>
+    <title>회전체 시뮬레이션 - AI Vision & Draw Snap</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -47,7 +47,6 @@
         /* PC에서는 접기 버튼 숨김 (기본) */
         body.pc-mode #btnCollapse { display: none; }
 
-
         /* --- 2. Tablet Mode (Floating Layout) --- */
         body.tablet-mode #canvas-container {
             left: 0;
@@ -67,7 +66,6 @@
             max-height: 3.5rem; /* 헤더만 보이게 */
             overflow: hidden;
         }
-
 
         /* --- 3. Mobile Mode (Bottom Sheet Layout) --- */
         body.mobile-mode #canvas-container {
@@ -89,7 +87,6 @@
         body.mobile-mode .panel.collapsed {
             transform: translateY(calc(100% - 3.5rem));
         }
-
 
         /* 스크롤바 커스텀 */
         ::-webkit-scrollbar { width: 4px; }
@@ -116,7 +113,11 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
-<body class="pc-mode"> <!-- 기본 시작: PC 모드 -->
+<body class="pc-mode">
+
+    <!-- Custom Toast Message Container -->
+    <div id="toastMessage" class="fixed top-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg z-[100] transition-opacity duration-300 opacity-0 pointer-events-none text-sm font-medium">
+    </div>
 
     <!-- UI Control Panel -->
     <div id="mainPanel" class="panel p-5 overflow-hidden">
@@ -165,7 +166,7 @@
                     </div>
 
                     <!-- Image Preview Thumbnail (Initially Hidden) -->
-                    <div id="imgPreviewContainer" class="hidden relative w-8 h-8 rounded overflow-hidden border border-indigo-300 group">
+                    <div id="imgPreviewContainer" class="hidden relative w-8 h-8 rounded overflow-hidden border border-indigo-300 group flex-shrink-0">
                         <img id="imgPreview" class="w-full h-full object-cover">
                         <button onclick="clearImage()" class="absolute inset-0 bg-black/60 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity font-bold">
                             ✕
@@ -200,25 +201,16 @@
                     ✏️ 직접 그리기 모드
                 </button>
                 
-                <!-- Draw Options -->
+                <!-- Draw Options (With 3 Buttons) -->
                 <div id="drawTypeControls" class="hidden flex flex-col gap-2 bg-gray-50 p-3 rounded mt-1 mb-2 border border-gray-100">
-                    <span class="text-xs font-bold text-gray-500 mb-1 block">그리기 방식 선택</span>
-                    <div class="flex justify-between gap-1 text-xs font-medium text-gray-700">
-                        <label class="flex items-center cursor-pointer hover:text-indigo-600 bg-white px-2 py-1 rounded border border-gray-200 shadow-sm flex-1 justify-center">
-                            <input type="radio" name="drawType" value="linear" checked class="mr-1 accent-indigo-600" onchange="setDrawType('linear')">
-                            직선
-                        </label>
-                        <label class="flex items-center cursor-pointer hover:text-indigo-600 bg-white px-2 py-1 rounded border border-gray-200 shadow-sm flex-1 justify-center">
-                            <input type="radio" name="drawType" value="curve" class="mr-1 accent-indigo-600" onchange="setDrawType('curve')">
-                            자동 곡선
-                        </label>
-                        <label class="flex items-center cursor-pointer hover:text-indigo-600 bg-white px-2 py-1 rounded border border-gray-200 shadow-sm flex-1 justify-center">
-                            <input type="radio" name="drawType" value="freehand" class="mr-1 accent-indigo-600" onchange="setDrawType('freehand')">
-                            자유선
-                        </label>
+                    <span class="text-xs font-bold text-gray-500 mb-1 block">그리기 도구 (Snap 0.5 격자)</span>
+                    <div class="grid grid-cols-3 gap-1 text-xs font-medium text-gray-700">
+                        <button onclick="setDrawType('linear')" id="btnDrawLinear" class="bg-indigo-600 text-white px-2 py-1.5 rounded shadow-sm transition-colors">📏 직선</button>
+                        <button onclick="setDrawType('curve')" id="btnDrawCurve" class="bg-white text-gray-700 hover:bg-gray-100 border border-gray-200 px-2 py-1.5 rounded shadow-sm transition-colors">〰️ 자동 호</button>
+                        <button onclick="setDrawType('freehand')" id="btnDrawFree" class="bg-white text-gray-700 hover:bg-gray-100 border border-gray-200 px-2 py-1.5 rounded shadow-sm transition-colors">✍️ 자유선</button>
                     </div>
                     <p id="drawHint" class="text-[10px] text-gray-400 text-center mt-1">
-                        점을 클릭하여 직선으로 연결합니다.
+                        격자에 맞춰 점을 클릭하여 직선으로 연결합니다.
                     </p>
                 </div>
 
@@ -260,6 +252,15 @@
                             세로 자르기
                         </button>
                     </div>
+                    
+                    <!-- 단면 높이 조절 슬라이더 (가로 자르기 시 표시) -->
+                    <div id="sliceHeightControl" class="hidden mt-2 space-y-1 bg-gray-50 p-2 rounded border border-gray-100">
+                        <div class="flex justify-between items-center">
+                            <label class="text-[11px] font-bold text-gray-600">자르는 높이 (Y축)</label>
+                            <span id="sliceHeightValue" class="text-xs text-indigo-600 font-bold">0.0</span>
+                        </div>
+                        <input type="range" id="sliceHeightSlider" min="-10" max="10" step="0.1" value="0" class="w-full h-1.5 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+                    </div>
                 </div>
 
                 <div class="text-center">
@@ -285,12 +286,21 @@
     <div id="canvas-container"></div>
 
     <script>
+        // --- Custom Toast Message (Replaces alert) ---
+        function showMessage(msg) {
+            const toast = document.getElementById('toastMessage');
+            toast.innerText = msg;
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 3000);
+        }
+
         // --- Gemini API ---
         const apiKey = ""; 
         let selectedImageBase64 = null;
         let selectedImageMimeType = null;
 
-        // Image Handling
         function handleImageUpload(input) {
             const file = input.files[0];
             if (!file) return;
@@ -298,18 +308,15 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 const base64String = e.target.result;
-                // Store raw base64 without prefix for API
                 selectedImageBase64 = base64String.split(',')[1];
                 selectedImageMimeType = file.type;
 
-                // Show preview
                 const img = document.getElementById('imgPreview');
                 img.src = base64String;
                 
                 document.getElementById('imgPreviewContainer').classList.remove('hidden');
                 document.getElementById('imgPreviewBadge').classList.remove('hidden');
                 
-                // Hide prompt placeholder if empty
                 const promptInput = document.getElementById('aiPrompt');
                 if(!promptInput.value) promptInput.placeholder = "사진 속 물체를 분석합니다...";
             };
@@ -338,7 +345,6 @@
             }
 
             const payload = { contents: [{ role: "user", parts: parts }] };
-            // 현재 환경에서 호환되는 지원 모델로 변경
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
             const delays = [1000, 2000, 4000, 8000, 16000];
 
@@ -351,8 +357,6 @@
                     });
                     
                     if (!response.ok) {
-                        const errText = await response.text();
-                        console.error("API Error Details:", errText);
                         throw new Error(`API Error: ${response.status}`);
                     }
                     
@@ -360,7 +364,7 @@
                     return data.candidates[0].content.parts[0].text;
                 } catch (error) {
                     if (i === delays.length) {
-                        alert("AI 연결 오류. 잠시 후 다시 시도해주세요.\n(API 키가 유효한지 확인해주세요.)");
+                        showMessage("AI 연결 오류. 잠시 후 다시 시도해주세요.");
                         return null;
                     }
                     await new Promise(resolve => setTimeout(resolve, delays[i]));
@@ -372,7 +376,10 @@
             const userInput = document.getElementById('aiPrompt').value.trim();
             const hasImage = !!selectedImageBase64;
 
-            if (!userInput && !hasImage) return alert("만들고 싶은 도형 이름을 입력하거나 사진을 업로드하세요!");
+            if (!userInput && !hasImage) {
+                showMessage("만들고 싶은 도형 이름을 입력하거나 사진을 업로드하세요!");
+                return;
+            }
 
             const btn = document.getElementById('btnGenerate');
             const originalContent = btn.innerHTML;
@@ -397,16 +404,14 @@
                     - The points should form a continuous path.
                     - Provide 15-30 points for a smooth curve.
                     
-                    Output ONLY raw JSON array. Do not include markdown formatting like \`\`\`json.
-                    Example: [{"x":0,"y":-5},{"x":3,"y":0},{"x":0,"y":5}]
+                    Output ONLY raw JSON array. Example: [{"x":0,"y":-5},{"x":3,"y":0},{"x":0,"y":5}]
                 `;
             } else {
                 prompt = `
                     Generate a JSON array of 2D coordinates (x, y) for a solid of revolution profile of: "${userInput}".
                     Create the RIGHT-HALF profile (x >= 0).
                     Constraints: x >= 0, Y roughly -8 to 8. Continuous path. 10-30 points.
-                    Output ONLY raw JSON array. Do not include markdown formatting like \`\`\`json.
-                    Example: [{"x":0,"y":-5},{"x":3,"y":0},{"x":0,"y":5}]
+                    Output ONLY raw JSON array. Example: [{"x":0,"y":-5},{"x":3,"y":0},{"x":0,"y":5}]
                 `;
             }
 
@@ -417,12 +422,8 @@
 
             if (resultText) {
                 try {
-                    // 더 강력한 JSON 추출 정규식 사용 (AI가 텍스트를 섞어 보내도 배열만 추출)
-                    const jsonMatch = resultText.match(/\[\s*\{[\s\S]*\}\s*\]/);
-                    if (!jsonMatch) throw new Error("JSON 배열을 찾을 수 없습니다.");
-                    
-                    const pointsData = JSON.parse(jsonMatch[0]);
-                    
+                    const cleanedJson = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
+                    const pointsData = JSON.parse(cleanedJson);
                     if (Array.isArray(pointsData) && pointsData.length > 1) {
                         if(isDrawMode) toggleDrawMode();
                         currentPoints = pointsData.map(p => new THREE.Vector2(Math.abs(p.x), p.y));
@@ -431,38 +432,41 @@
                         animateRevolution();
                         document.getElementById('explanationModal').classList.add('hidden');
                     } else {
-                        alert("유효한 도형 데이터를 생성하지 못했습니다.");
+                        showMessage("유효한 도형 데이터를 생성하지 못했습니다.");
                     }
                 } catch (e) { 
-                    console.error("Parse Error:", e, resultText);
-                    alert("도형 데이터 해석 실패. 다시 시도해주세요. (단어를 조금 바꿔서 입력해보세요)"); 
+                    console.error(e);
+                    showMessage("도형 데이터 해석 실패. 다시 시도해주세요."); 
                 }
             }
         }
 
         async function explainShapeWithGemini() {
-            if (!currentPoints.length) return alert("도형이 없습니다.");
+            if (!currentPoints.length) {
+                showMessage("도형이 없습니다.");
+                return;
+            }
             
             const btn = document.getElementById('btnExplain');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<div class="spinner" style="width:12px;height:12px;border-width:2px;"></div> 분석 중...';
-            btn.disabled = true;
+            if(btn) {
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<div class="spinner" style="width:12px;height:12px;border-width:2px;"></div> 분석 중...';
+                btn.disabled = true;
 
-            const pointsSummary = currentPoints.map(p => `(${p.x.toFixed(1)}, ${p.y.toFixed(1)})`).join(', ');
-            const prompt = `
-                Analyze this solid of revolution profile. Points: [${pointsSummary}]
-                1. What shape is this? 2. Geometric properties? 3. Real-world example?
-                Respond in Korean (한국어). Concise.
-            `;
+                const pointsSummary = currentPoints.map(p => `(${p.x.toFixed(1)}, ${p.y.toFixed(1)})`).join(', ');
+                const prompt = `
+                    Analyze this solid of revolution profile. Points: [${pointsSummary}]
+                    1. What shape is this? 2. Geometric properties? 3. Real-world example?
+                    Respond in Korean (한국어). Concise.
+                `;
 
-            // 분석 함수도 새로운 모델 주소를 사용하도록 callGemini 호출
-            const explanation = await callGemini(prompt);
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-            
-            if (explanation) {
-                document.getElementById('explanationContent').innerHTML = marked.parse(explanation);
-                document.getElementById('explanationModal').classList.remove('hidden');
+                const explanation = await callGemini(prompt);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                if (explanation) {
+                    document.getElementById('explanationContent').innerHTML = marked.parse(explanation);
+                    document.getElementById('explanationModal').classList.remove('hidden');
+                }
             }
         }
 
@@ -473,13 +477,9 @@
             const btnTablet = document.getElementById('btnModeTablet');
             const btnMobile = document.getElementById('btnModeMobile');
             
-            // 1. Reset Classes
             body.classList.remove('pc-mode', 'tablet-mode', 'mobile-mode');
-            
-            // 2. Add Active Class
             body.classList.add(`${mode}-mode`);
             
-            // 3. Reset Button Styles (Gray)
             const inactiveClass = "flex-1 px-2 py-1.5 text-[11px] font-bold rounded hover:bg-gray-200 text-gray-500 transition-colors flex items-center justify-center gap-1";
             const activeClass = "flex-1 px-2 py-1.5 text-[11px] font-bold rounded bg-indigo-600 text-white shadow-sm transition-colors flex items-center justify-center gap-1";
             
@@ -487,23 +487,19 @@
             btnTablet.className = inactiveClass;
             btnMobile.className = inactiveClass;
 
-            // 4. Set Active Button
             if (mode === 'pc') btnPC.className = activeClass;
             else if (mode === 'tablet') btnTablet.className = activeClass;
             else if (mode === 'mobile') btnMobile.className = activeClass;
             
-            // 5. Reset Panel State
             const panel = document.getElementById('mainPanel');
             const collapseBtn = document.getElementById('btnCollapse');
-            panel.classList.remove('collapsed'); // Expand panel on switch
+            panel.classList.remove('collapsed'); 
             collapseBtn.style.transform = 'rotate(0deg)';
 
-            // Trigger resize
             setTimeout(onWindowResize, 450);
         }
         
         function togglePanelCollapse() {
-            // PC mode is usually fixed, but Tablet/Mobile is collapsible
             if (document.body.classList.contains('pc-mode')) return;
 
             const panel = document.getElementById('mainPanel');
@@ -517,7 +513,6 @@
             }
         }
 
-        // Auto Collapse for Mobile/Tablet on Interaction
         function autoCollapsePanel() {
             if (document.body.classList.contains('mobile-mode')) {
                 const panel = document.getElementById('mainPanel');
@@ -527,12 +522,11 @@
                     btn.style.transform = 'rotate(180deg)';
                 }
             }
-            // Tablet users might prefer it open, so we only auto-collapse mobile
         }
 
         // --- Basic Setup ---
         let scene, camera, renderer, controls;
-        let mainMesh, axisHelper;
+        let mainMesh, axisHelper, gridHelper;
         let raycaster, mouse, planeMesh;
         
         let currentPoints = []; 
@@ -544,6 +538,7 @@
         let drawingMarkers = [];
         let revolutionAnimFrameId = null;
         let currentSliceMode = 'none';
+        let currentSliceY = 0; // 단면 Y축 높이
 
         const COLOR_MESH = 0x3b82f6; 
         const COLOR_DRAW = 0xea580c; 
@@ -591,6 +586,13 @@
             axisHelper = new THREE.Mesh(axisGeo, axisMat);
             scene.add(axisHelper);
 
+            // Add Grid for Drawing (0.5 간격 격자)
+            gridHelper = new THREE.GridHelper(40, 80, 0x888888, 0xe2e8f0);
+            gridHelper.rotation.x = Math.PI / 2;
+            gridHelper.position.z = -0.01; // 선과 겹치지 않게 살짝 뒤로
+            gridHelper.visible = false;
+            scene.add(gridHelper);
+
             raycaster = new THREE.Raycaster();
             mouse = new THREE.Vector2();
             planeMesh = new THREE.Mesh(
@@ -610,12 +612,18 @@
             canvasEl.addEventListener('touchmove', onTouchMove, {passive: false});
             canvasEl.addEventListener('touchend', onTouchEnd, {passive: false});
 
-
             document.getElementById('angleSlider').addEventListener('input', () => {
                 if(revolutionAnimFrameId) cancelAnimationFrame(revolutionAnimFrameId);
                 updateMeshGeometry();
             });
             document.getElementById('wireframeCheck').addEventListener('change', updateMaterial);
+            
+            // 단면 높이 슬라이더 이벤트
+            document.getElementById('sliceHeightSlider').addEventListener('input', (e) => {
+                currentSliceY = parseFloat(e.target.value);
+                document.getElementById('sliceHeightValue').innerText = currentSliceY.toFixed(1);
+                updateMeshGeometry(); 
+            });
         }
 
         // --- Logic ---
@@ -667,6 +675,28 @@
             else if (mode === 'horizontal') btnHoriz.className = "bg-blue-600 text-white py-2 rounded text-xs transition font-bold ring-2 ring-offset-1 ring-blue-600 shadow-sm";
             else if (mode === 'vertical') btnVert.className = "bg-blue-600 text-white py-2 rounded text-xs transition font-bold ring-2 ring-offset-1 ring-blue-600 shadow-sm";
 
+            const sliceHeightControl = document.getElementById('sliceHeightControl');
+            if (mode === 'horizontal') {
+                sliceHeightControl.classList.remove('hidden');
+                // 도형의 크기에 맞게 슬라이더 범위 자동 조절
+                if (currentPoints && currentPoints.length > 0) {
+                    let minY = Infinity, maxY = -Infinity;
+                    currentPoints.forEach(p => {
+                        if (p.y < minY) minY = p.y;
+                        if (p.y > maxY) maxY = p.y;
+                    });
+                    const slider = document.getElementById('sliceHeightSlider');
+                    slider.min = minY;
+                    slider.max = maxY;
+                    // 현재 값이 범위를 벗어나지 않도록 보정
+                    currentSliceY = Math.max(minY, Math.min(maxY, currentSliceY));
+                    slider.value = currentSliceY;
+                    document.getElementById('sliceHeightValue').innerText = currentSliceY.toFixed(1);
+                }
+            } else {
+                sliceHeightControl.classList.add('hidden');
+            }
+
             updateMeshGeometry(); 
         }
 
@@ -705,6 +735,8 @@
             const effectiveAngle = Math.max(angleRad, 0.0001); 
             const geometry = new THREE.LatheGeometry(currentPoints, 48, 0, effectiveAngle);
             
+            clipPlanes[0].constant = currentSliceY; // 가로 자르기 평면 높이 업데이트
+            
             let activePlanes = [];
             if (currentSliceMode === 'horizontal') activePlanes = [clipPlanes[0]];
             else if (currentSliceMode === 'vertical') activePlanes = [clipPlanes[1]];
@@ -740,14 +772,12 @@
             const ctx = canvas.getContext('2d');
             const w = canvas.width;
             const h = canvas.height;
-            const padding = 30; // 여백 추가
+            const padding = 30;
 
-            // 캔버스 초기화
             ctx.clearRect(0, 0, w, h);
             ctx.fillStyle = "#f8fafc";
             ctx.fillRect(0,0,w,h);
 
-            // 십자선 (중심 표시) - 연하게
             ctx.strokeStyle = "#e2e8f0";
             ctx.lineWidth = 1;
             ctx.beginPath();
@@ -755,7 +785,6 @@
             ctx.moveTo(w/2, 0); ctx.lineTo(w/2, h);
             ctx.stroke();
 
-            // '전체 보기' 모드일 때
             if (currentSliceMode === 'none') {
                 ctx.fillStyle = "#94a3b8";
                 ctx.font = "12px 'Noto Sans KR', sans-serif";
@@ -769,15 +798,10 @@
 
             if (!currentPoints || currentPoints.length === 0) return;
 
-            // --- 자동 스케일링 로직 ---
             let scale = 1;
             
             if (currentSliceMode === 'vertical') {
-                // --- 세로 단면 (회전축 포함 평면) ---
-                // Y축을 기준으로 좌우 대칭인 단면을 그립니다.
-                
-                // 1. 단면의 범위(Bounding Box) 계산
-                let minX = 0; // 중심축이 0
+                let minX = 0; 
                 let maxX = 0;
                 let minY = Infinity;
                 let maxY = -Infinity;
@@ -788,40 +812,33 @@
                     if (p.y > maxY) maxY = p.y;
                 });
 
-                if (minY === Infinity) return; // 유효한 점 없음
+                if (minY === Infinity) return; 
 
-                // 2. 화면에 맞추기 위한 스케일 계산
-                const shapeWidth = maxX * 2; // 좌우 대칭이므로 최대 반지름 * 2
+                const shapeWidth = maxX * 2; 
                 const shapeHeight = maxY - minY;
                 
-                // 가로/세로 비율에 맞춰 더 작은 쪽을 기준으로 스케일 설정 (Fit)
                 const scaleX = (w - padding) / shapeWidth;
                 const scaleY = (h - padding) / shapeHeight;
                 scale = Math.min(scaleX, scaleY);
 
-                // 3. 중심점 보정 (도형의 중심을 캔버스 중심으로)
                 const shapeCenterY = (minY + maxY) / 2;
 
-                // 4. 그리기
                 ctx.fillStyle = COLOR_SECTION_FILL;
                 ctx.strokeStyle = COLOR_SECTION_STROKE;
                 ctx.lineWidth = 2;
 
                 ctx.beginPath();
-                // 오른쪽 경로 (Original Points)
                 currentPoints.forEach((p, i) => {
                     const canvasX = w/2 + p.x * scale;
-                    // Y축 반전 주의 (Canvas는 아래가 +) + 중심 보정
                     const canvasY = h/2 - (p.y - shapeCenterY) * scale;
                     
                     if (i === 0) ctx.moveTo(canvasX, canvasY);
                     else ctx.lineTo(canvasX, canvasY);
                 });
                 
-                // 왼쪽 경로 (Mirrored Points) - 역순으로 그려서 닫힌 도형 만들기
                 for (let i = currentPoints.length - 1; i >= 0; i--) {
                     const p = currentPoints[i];
-                    const canvasX = w/2 - p.x * scale; // X 대칭
+                    const canvasX = w/2 - p.x * scale; 
                     const canvasY = h/2 - (p.y - shapeCenterY) * scale;
                     ctx.lineTo(canvasX, canvasY);
                 }
@@ -831,36 +848,29 @@
                 ctx.stroke();
 
             } else if (currentSliceMode === 'horizontal') {
-                // --- 가로 단면 (Y=0 평면) ---
-                const radii = getRadiiAtY(0);
+                const radii = getRadiiAtY(currentSliceY); // 변경된 높이 적용
+
+                // 가로 단면 전체 비율 유지를 위한 절대 최대 반지름 계산
+                let globalMaxX = 0.1;
+                currentPoints.forEach(p => { if (p.x > globalMaxX) globalMaxX = p.x; });
+                const maxShapeSize = globalMaxX * 2;
+                scale = (Math.min(w, h) - padding) / maxShapeSize;
 
                 if (radii.length > 0) {
-                    radii.sort((a, b) => a - b); // 작은 반지름 -> 큰 반지름 정렬
-                    const maxR = radii[radii.length - 1]; // 가장 큰 반지름 (외경)
+                    radii.sort((a, b) => a - b); 
 
-                    // 1. 스케일 계산 (원형이므로 정사각형 영역 Fit)
-                    const shapeSize = maxR * 2;
-                    scale = (Math.min(w, h) - padding) / shapeSize;
-
-                    // 2. 그리기 (동심원)
                     ctx.fillStyle = COLOR_SECTION_FILL;
                     ctx.strokeStyle = COLOR_SECTION_STROKE;
                     ctx.lineWidth = 2;
-
-                    // 큰 원부터 그리고, 작은 원으로 구멍 뚫는 식 (Even-Odd Rule or Layering)
-                    // 예: 도넛 -> 큰원(파랑) -> 작은원(흰색)
                     
                     for (let i = radii.length - 1; i >= 0; i--) {
                         ctx.beginPath();
                         ctx.arc(w/2, h/2, radii[i] * scale, 0, Math.PI * 2);
                         
-                        // 가장 바깥쪽(마지막)부터: 채움 -> 구멍 -> 채움 -> 구멍 순서
-                        // radii 배열은 오름차순. 뒤에서부터 순회.
-                        // (radii.length - 1 - i) 가 0(가장바깥), 1(그다음), 2...
                         if ((radii.length - 1 - i) % 2 === 0) {
                             ctx.fillStyle = COLOR_SECTION_FILL;
                         } else {
-                            ctx.fillStyle = "#f8fafc"; // 배경색으로 덮어서 구멍 표현
+                            ctx.fillStyle = "#f8fafc"; 
                         }
                         
                         ctx.fill();
@@ -872,7 +882,7 @@
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
                     ctx.font = "12px 'Noto Sans KR', sans-serif";
-                    ctx.fillText("이 높이(Y=0)에는 단면이 없습니다.", w/2, h/2);
+                    ctx.fillText(`이 높이(Y=${currentSliceY.toFixed(1)})에는 단면이 없습니다.`, w/2, h/2);
                 }
             }
         }
@@ -900,9 +910,28 @@
         function setDrawType(type) {
             drawType = type;
             const hint = document.getElementById('drawHint');
-            if(type === 'linear') hint.innerText = '점을 클릭하여 직선으로 연결합니다.';
-            else if(type === 'curve') hint.innerText = '드래그 후 놓으면 원형 호(Arc)로 자동 변환됩니다.';
-            else if(type === 'freehand') hint.innerText = '마우스 움직임 그대로 자유롭게 그립니다.';
+            
+            const btnLin = document.getElementById('btnDrawLinear');
+            const btnCur = document.getElementById('btnDrawCurve');
+            const btnFre = document.getElementById('btnDrawFree');
+            
+            const activeCls = "bg-indigo-600 text-white px-2 py-1.5 rounded shadow-sm transition-colors";
+            const inactiveCls = "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200 px-2 py-1.5 rounded shadow-sm transition-colors";
+            
+            if (btnLin) btnLin.className = inactiveCls;
+            if (btnCur) btnCur.className = inactiveCls;
+            if (btnFre) btnFre.className = inactiveCls;
+
+            if(type === 'linear') {
+                hint.innerText = '격자에 맞춰 점을 클릭하여 직선으로 연결합니다.';
+                if (btnLin) btnLin.className = activeCls;
+            } else if(type === 'curve') {
+                hint.innerText = '드래그 후 놓으면 원형 호(Arc)로 자동 변환됩니다.';
+                if (btnCur) btnCur.className = activeCls;
+            } else if(type === 'freehand') {
+                hint.innerText = '마우스 움직임 그대로 자유롭게 그립니다.';
+                if (btnFre) btnFre.className = activeCls;
+            }
         }
 
         function toggleDrawMode() {
@@ -914,7 +943,6 @@
             document.getElementById('explanationModal').classList.add('hidden');
 
             if (isDrawMode) {
-                // RESET LOGIC
                 if(mainMesh) {
                     scene.remove(mainMesh);
                     mainMesh.geometry.dispose();
@@ -922,6 +950,8 @@
                 }
                 currentPoints = [];
                 
+                if (gridHelper) gridHelper.visible = true;
+
                 setSliceMode('none'); 
                 moveCameraToFront();
                 clearDrawing();
@@ -938,6 +968,7 @@
                 instructions.classList.add('hidden');
                 controlsDiv.classList.add('hidden');
                 typeControls.classList.add('hidden');
+                if (gridHelper) gridHelper.visible = false;
                 controls.enabled = true;
                 clearDrawing();
             }
@@ -968,7 +999,7 @@
             const intersects = raycaster.intersectObject(planeMesh);
             if (intersects.length > 0) {
                 const pt = intersects[0].point;
-                // Snap only for Linear
+                // Snap only for Linear to match grid intersections (0.5 units)
                 if (drawType === 'linear') {
                     pt.x = Math.round(pt.x * 2) / 2;
                     pt.y = Math.round(pt.y * 2) / 2;
@@ -1045,7 +1076,6 @@
             const p1 = drawingPoints[0];
             const p3 = drawingPoints[drawingPoints.length - 1];
 
-            // Find point p2 furthest from line p1-p3
             let maxDist = 0;
             let p2Index = -1;
             const A = p1.y - p3.y;
@@ -1068,9 +1098,8 @@
                 }
             }
 
-            // Threshold for straight line
             if (maxDist < 0.5 || p2Index === -1) {
-                drawingPoints = [p1, p3]; // Just a line
+                drawingPoints = [p1, p3];
             } else {
                 const p2 = drawingPoints[p2Index];
                 const centerData = getCircleCenter(p1, p2, p3);
@@ -1098,7 +1127,6 @@
                 }
             }
             
-            // Redraw
             if (drawingLine) { scene.remove(drawingLine); drawingLine.geometry.dispose(); }
             drawingLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(drawingPoints), new THREE.LineBasicMaterial({ color: COLOR_DRAW, linewidth: 3 }));
             scene.add(drawingLine);
@@ -1145,7 +1173,10 @@
         }
 
         function finishDrawing() {
-            if (drawingPoints.length < 2) { alert("2개 이상의 점이 필요합니다."); return; }
+            if (drawingPoints.length < 2) { 
+                showMessage("2개 이상의 점이 필요합니다."); 
+                return; 
+            }
             currentPoints = drawingPoints.map(p => new THREE.Vector2(Math.abs(p.x), p.y));
             
             if (currentPoints[0].distanceTo(currentPoints[currentPoints.length-1]) > 0.1) {
